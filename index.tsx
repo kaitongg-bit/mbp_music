@@ -4,7 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { GoogleGenAI, Type } from "@google/genai";
 
 // --- Config ---
-const TARGET_MODEL = 'gemini-3-flash-preview';
+const TARGET_MODEL = 'gemini-2.5-flash';
 const RECOMPOSE_INTERVAL = 18000;
 const INITIAL_BPM = 105;
 
@@ -25,7 +25,7 @@ interface MasterDNA {
   color: string;
   mood: string;
   scale: string;
-  aiThought?: string; // AI's reasoning
+  aiThought?: string; 
 }
 
 const INITIAL_DNA: MasterDNA = {
@@ -53,7 +53,7 @@ const INITIAL_DNA: MasterDNA = {
   color: "#a855f7",
   mood: "MYSTICAL",
   scale: "C Minor",
-  aiThought: "Initial seed pattern loaded."
+  aiThought: "System initialized. Optimizing for high-speed neural synthesis..."
 };
 
 function App() {
@@ -224,22 +224,25 @@ function App() {
 
   const fetchNewDNA = async () => {
     if (!isActiveRef.current) return;
-    setStatus('NEURAL_PROCESSING...');
+    setStatus('CALCULATING...');
     setMutationTimer(RECOMPOSE_INTERVAL / 1000);
     try {
       const response = await ai.models.generateContent({
         model: TARGET_MODEL,
-        contents: `AI Music Synthesis. BPM: ${bpmRef.current}. 
-        Generate complex multi-track DNA for Sections A and B. 
-        Return MasterDNA JSON. Include 'aiThought' (brief creative goal). 
-        Ensure scales like Lydian or Mixolydian for richness.`,
+        contents: `BPM: ${bpmRef.current}. Compose Music DNA. 
+        RULES:
+        1. LeadMelody: At least 5 MIDI notes (60-84).
+        2. Chords: Lush 4-note structures.
+        3. aiThought: MAX 15 WORDS summarize.
+        FASTEST RESPONSE REQUIRED.`,
         config: {
+          systemInstruction: "You are a fast MIDI orchestrator. Output strict JSON. aiThought must be ultra-short (under 15 words).",
           responseMimeType: "application/json",
           responseSchema: {
             type: Type.OBJECT,
             properties: {
               genre: { type: Type.STRING },
-              aiThought: { type: Type.STRING },
+              aiThought: { type: Type.STRING, description: "EXTREMELY SHORT (MAX 15 WORDS) intention." },
               scale: { type: Type.STRING },
               mood: { type: Type.STRING },
               color: { type: Type.STRING },
@@ -311,7 +314,7 @@ function App() {
         <header className="flex justify-between items-end border-b border-white/5 pb-6 mb-8">
           <div className="space-y-1">
              <h1 className="text-4xl font-black tracking-tighter italic text-transparent bg-clip-text bg-gradient-to-r from-white to-white/30 uppercase">Neural_Strudel</h1>
-             <p className="text-[10px] font-bold opacity-30 tracking-[0.4em] uppercase">AI Orchestrator v5.0 // {status}</p>
+             <p className="text-[10px] font-bold opacity-30 tracking-[0.4em] uppercase">AI Orchestrator v5.2 // {status}</p>
           </div>
           <div className="text-right flex flex-col items-end">
              <span className="text-[9px] font-black opacity-20 uppercase mb-1">Scale: {dna.scale}</span>
@@ -333,7 +336,6 @@ function App() {
                  onChange={(e) => {setBpm(parseInt(e.target.value)); bpmRef.current = parseInt(e.target.value);}}
                  className="w-full h-1 bg-white/10 rounded-full appearance-none cursor-pointer accent-white"
                />
-               <p className="mt-4 text-[9px] text-white/20 italic">BPM directly affects the complexity of the generated neural patterns.</p>
             </div>
 
             <button 
@@ -343,11 +345,11 @@ function App() {
               {isActive ? 'HALT_SYNTH' : 'INIT_AI'}
             </button>
 
-            {/* AI Thought Log */}
+            {/* AI Thought Log: Extremely Shortened */}
             <div className="flex-1 bg-white/5 border border-white/10 rounded-3xl p-6 overflow-hidden flex flex-col">
-               <span className="text-[9px] font-black opacity-30 uppercase mb-4">AI_Thought_Stream</span>
-               <div className="flex-1 text-[10px] text-emerald-400 font-bold leading-relaxed italic opacity-80 overflow-y-auto">
-                 {dna.aiThought || "Waiting for next mutation cycle..."}
+               <span className="text-[9px] font-black opacity-30 uppercase mb-4 tracking-tighter">AI_Core_Intention</span>
+               <div className="flex-1 text-[11px] text-emerald-400 font-black leading-relaxed italic opacity-90 overflow-y-auto custom-scrollbar uppercase">
+                 {dna.aiThought || "STANDBY..."}
                </div>
             </div>
           </div>
@@ -390,7 +392,7 @@ function App() {
              <div className="h-1/3 flex gap-6">
                 <div className="flex-1 bg-black/40 border border-white/10 rounded-3xl p-6 relative overflow-hidden group">
                    <div className="flex justify-between items-center mb-4">
-                      <span className="text-[9px] font-black opacity-30 uppercase tracking-widest">Neural_Manifest (JSON)</span>
+                      <span className="text-[9px] font-black opacity-30 uppercase tracking-widest">Neural_Manifest</span>
                       <button onClick={() => setShowRaw(!showRaw)} className="text-[8px] bg-white/10 px-2 py-1 rounded hover:bg-white/20 transition-colors uppercase font-bold">
                         {showRaw ? 'HIDE_RAW' : 'VIEW_RAW'}
                       </button>
@@ -400,12 +402,11 @@ function App() {
                       {showRaw ? (
                         <pre className="whitespace-pre-wrap">{JSON.stringify(dna, null, 2)}</pre>
                       ) : (
-                        <div className="space-y-2">
-                           <div><span className="opacity-40">GENRE:</span> {dna.genre}</div>
-                           <div><span className="opacity-40">CHORDS:</span> {JSON.stringify(dna.sections[currentSection].chordProgression[0])}</div>
-                           <div><span className="opacity-40">BASS_MIDI:</span> {dna.sections[currentSection].bassLine.join(", ")}</div>
-                           <div><span className="opacity-40">RHYTHM_PROB:</span> {dna.sections[currentSection].probMap.map(v=>v.toFixed(1)).join(" | ")}</div>
-                           <div className="text-white/20 mt-4 animate-pulse uppercase">[ SYSTEM STABLE - DATA FLOW ACTIVE ]</div>
+                        <div className="space-y-1">
+                           <div className="flex justify-between border-b border-white/5 py-1"><span className="opacity-40">GENRE</span> <span>{dna.genre}</span></div>
+                           <div className="flex justify-between border-b border-white/5 py-1"><span className="opacity-40">CHORDS</span> <span>{JSON.stringify(dna.sections[currentSection].chordProgression[0])}</span></div>
+                           <div className="flex justify-between border-b border-white/5 py-1"><span className="opacity-40">BASS_LINE</span> <span className="truncate ml-4">{dna.sections[currentSection].bassLine.join(", ")}</span></div>
+                           <div className="text-[8px] text-white/10 mt-2 uppercase tracking-tighter italic">[ OPTIMIZED FOR 2.5 FLASH SPEED ]</div>
                         </div>
                       )}
                    </div>
@@ -416,7 +417,6 @@ function App() {
                    <div className="flex-1 w-full bg-white/5 rounded-2xl overflow-hidden mt-2 relative">
                       <div className="absolute inset-x-0 bottom-0 bg-white transition-all duration-75" style={{ height: `${audioLevel * 100}%`, opacity: 0.1 + audioLevel }} />
                    </div>
-                   <div className="text-[8px] mt-2 opacity-40 font-bold uppercase text-center tracking-tighter">Peak_DSP_Out</div>
                 </div>
              </div>
 
@@ -424,8 +424,8 @@ function App() {
         </div>
 
         <footer className="mt-6 flex justify-between items-center text-[9px] font-black opacity-10 tracking-[1em] uppercase border-t border-white/5 pt-6">
-           <span>Hybrid_Engine_Active</span>
-           <span>Stochastic_Bypassing_Off</span>
+           <span>Speed_Optimized_v5.2</span>
+           <span>Low_Latency_Mode_On</span>
         </footer>
       </main>
     </div>
