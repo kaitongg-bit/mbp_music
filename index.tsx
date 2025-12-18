@@ -20,8 +20,6 @@ interface SectionDNA {
 interface MasterDNA {
   sections: { A: SectionDNA, B: SectionDNA };
   genre: string;
-  palette: string;
-  energy: number;
   color: string;
   mood: string;
   scale: string;
@@ -47,36 +45,33 @@ const INITIAL_DNA: MasterDNA = {
       probMap: Array(8).fill(0.7)
     }
   },
-  genre: "DREAM_ELECTRONICA",
-  palette: 'ETHEREAL',
-  energy: 0.5,
+  genre: "COMPLEX_ELECTRONICA",
   color: "#a855f7",
-  mood: "MYSTICAL",
+  mood: "ENERGIZED",
   scale: "C Minor",
-  aiThought: "System initialized. Optimizing for high-speed neural synthesis..."
+  aiThought: "Core engine ready."
 };
 
 function App() {
   const [isActive, setIsActive] = useState(false);
   const [bpm, setBpm] = useState(INITIAL_BPM);
   const [dna, setDna] = useState<MasterDNA>(INITIAL_DNA);
-  const [status, setStatus] = useState('STANDBY');
+  const [status, setStatus] = useState('IDLE');
   const [audioLevel, setAudioLevel] = useState(0);
-  const [mutationTimer, setMutationTimer] = useState(RECOMPOSE_INTERVAL / 1000);
+  const [isEditingBpm, setIsEditingBpm] = useState(false);
+  const [tempBpm, setTempBpm] = useState(INITIAL_BPM.toString());
   const [currentStep, setCurrentStep] = useState(0);
-  const [currentSection, setCurrentSection] = useState<'A' | 'B'>('A');
-  const [showRaw, setShowRaw] = useState(false);
 
   const audioCtxRef = useRef<AudioContext | null>(null);
   const masterGainRef = useRef<GainNode | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
-  
   const isActiveRef = useRef(false);
   const bpmRef = useRef(INITIAL_BPM);
   const dnaRef = useRef(INITIAL_DNA);
   const stepRef = useRef(0);
   const nextStepTime = useRef(0);
   const schedulerTimerRef = useRef<number | null>(null);
+  const longPressTimerRef = useRef<number | null>(null);
 
   const ai = useMemo(() => new GoogleGenAI({ apiKey: process.env.API_KEY }), []);
 
@@ -92,22 +87,11 @@ function App() {
       const delay = ctx.createDelay(1.0);
       delay.delayTime.setValueAtTime(0.375, ctx.currentTime);
       const delayFeedback = ctx.createGain();
-      delayFeedback.gain.setValueAtTime(0.4, ctx.currentTime);
-      delay.connect(delayFeedback);
-      delayFeedback.connect(delay);
+      delayFeedback.gain.setValueAtTime(0.3, ctx.currentTime);
+      delay.connect(delayFeedback); delayFeedback.connect(delay);
       
-      const reverb = ctx.createConvolver();
-      const length = ctx.sampleRate * 2.5;
-      const impulse = ctx.createBuffer(2, length, ctx.sampleRate);
-      for (let i = 0; i < 2; i++) {
-        const channel = impulse.getChannelData(i);
-        for (let j = 0; j < length; j++) channel[j] = (Math.random() * 2 - 1) * Math.pow(1 - j / length, 2.5);
-      }
-      reverb.buffer = impulse;
-
       master.connect(delay);
-      delay.connect(reverb);
-      reverb.connect(ctx.destination);
+      delay.connect(ctx.destination);
       master.connect(analyser);
       analyser.connect(ctx.destination);
 
@@ -126,7 +110,7 @@ function App() {
     osc.type = type;
     osc.frequency.setValueAtTime(freq, time);
     filter.type = 'lowpass';
-    filter.frequency.setValueAtTime(env === 'pad' ? 800 : 2200, time);
+    filter.frequency.setValueAtTime(env === 'pad' ? 800 : 2500, time);
     g.gain.setValueAtTime(0, time);
     if (env === 'pluck') {
       g.gain.linearRampToValueAtTime(vol, time + 0.005);
@@ -138,84 +122,83 @@ function App() {
       g.gain.linearRampToValueAtTime(vol, time + 0.05);
       g.gain.exponentialRampToValueAtTime(0.001, time + dur);
     }
-    osc.connect(filter);
-    filter.connect(g);
-    g.connect(masterGainRef.current);
-    osc.start(time);
-    osc.stop(time + dur);
+    osc.connect(filter); filter.connect(g); g.connect(masterGainRef.current);
+    osc.start(time); osc.stop(time + dur);
   };
 
   const playPerc = (type: string, time: number, vol: number) => {
     const ctx = audioCtxRef.current;
     if (!ctx || !masterGainRef.current) return;
-    const osc = ctx.createOscillator();
     const g = ctx.createGain();
     if (type === 'kick') {
+      const osc = ctx.createOscillator();
       osc.frequency.setValueAtTime(120, time);
       osc.frequency.exponentialRampToValueAtTime(45, time + 0.1);
       g.gain.setValueAtTime(vol, time);
       g.gain.exponentialRampToValueAtTime(0.001, time + 0.3);
+      osc.connect(g); g.connect(masterGainRef.current);
+      osc.start(time); osc.stop(time + 0.3);
     } else if (type === 'snare') {
       const noise = ctx.createBufferSource();
       const buf = ctx.createBuffer(1, ctx.sampleRate * 0.1, ctx.sampleRate);
       for(let i=0; i<buf.length; i++) buf.getChannelData(0)[i] = Math.random()*2-1;
       noise.buffer = buf;
-      g.gain.setValueAtTime(vol * 0.4, time);
+      g.gain.setValueAtTime(vol * 0.5, time);
       g.gain.exponentialRampToValueAtTime(0.001, time + 0.1);
-      noise.connect(g);
-      g.connect(masterGainRef.current);
+      noise.connect(g); g.connect(masterGainRef.current);
       noise.start(time);
-      return;
     } else {
+      const osc = ctx.createOscillator();
       osc.type = 'triangle';
-      osc.frequency.setValueAtTime(type === 'hat' ? 8000 : 1500, time);
-      g.gain.setValueAtTime(vol * 0.08, time);
+      osc.frequency.setValueAtTime(type === 'hat' ? 9000 : 1800, time);
+      g.gain.setValueAtTime(vol * 0.1, time);
       g.gain.exponentialRampToValueAtTime(0.001, time + 0.05);
+      osc.connect(g); g.connect(masterGainRef.current);
+      osc.start(time); osc.stop(time + 0.1);
     }
-    osc.connect(g);
-    g.connect(masterGainRef.current);
-    osc.start(time);
-    osc.stop(time + 0.3);
   };
 
   const scheduler = useCallback(() => {
     const ctx = audioCtxRef.current;
     if (!ctx || !isActiveRef.current) return;
-    const lookAhead = 0.2;
-    while (nextStepTime.current < ctx.currentTime + lookAhead) {
+    while (nextStepTime.current < ctx.currentTime + 0.2) {
       const time = nextStepTime.current;
-      const step = stepRef.current % 16;
+      const stepIdx = stepRef.current % 8;
       const sectionKey = Math.floor(stepRef.current / 32) % 2 === 0 ? 'A' : 'B';
       const curSection = dnaRef.current.sections[sectionKey];
-      const stepIdx = step % 8;
       const stepDur = 60 / bpmRef.current / 4;
 
-      if (Math.random() < (curSection.probMap?.[stepIdx] ?? 0.9)) {
+      if (Math.random() < (curSection.probMap?.[stepIdx] ?? 0.8)) {
         if (curSection.drums.kick[stepIdx]) playPerc('kick', time, 1);
         if (curSection.drums.snare[stepIdx]) playPerc('snare', time, 0.7);
         if (curSection.drums.hihat[stepIdx]) playPerc('hat', time, 0.4);
         if (curSection.drums.glitch?.[stepIdx]) playPerc('glitch', time, 0.3);
+        
         if (curSection.bassLine?.[stepIdx]) {
           const freq = 440 * Math.pow(2, (curSection.bassLine[stepIdx] - 69) / 12);
           playInstrument(freq, time, stepDur * 0.8, 0.4, 'triangle', 'pluck');
         }
+        
         const leadNote = curSection.leadMelody?.[stepIdx];
         if (leadNote !== null && leadNote !== undefined) {
           const freq = 440 * Math.pow(2, (leadNote - 69) / 12);
-          playInstrument(freq, time, stepDur * 1.5, 0.2, 'sawtooth', 'lead');
+          playInstrument(freq, time, stepDur * 1.5, 0.25, 'sawtooth', 'lead');
         }
+
         if (curSection.arpPattern?.[stepIdx]) {
           const chord = curSection.chordProgression[0] || [60,64,67];
           const note = chord[Math.floor(Math.random() * chord.length)] + 12;
           playInstrument(440 * Math.pow(2, (note-69)/12), time, 0.15, 0.1, 'sine', 'pluck');
         }
       }
-      if (step % 8 === 0) {
+
+      if (stepIdx === 0) {
         (curSection.chordProgression[0] || [60,64,67]).forEach(n => {
           playInstrument(440 * Math.pow(2, (n-69)/12), time, stepDur * 8.2, 0.08, 'sine', 'pad');
         });
       }
-      setTimeout(() => { setCurrentStep(stepIdx); setCurrentSection(sectionKey); }, (time - ctx.currentTime) * 1000);
+
+      setTimeout(() => { setCurrentStep(stepIdx); }, (time - ctx.currentTime) * 1000);
       nextStepTime.current += stepDur;
       stepRef.current++;
     }
@@ -224,27 +207,25 @@ function App() {
 
   const fetchNewDNA = async () => {
     if (!isActiveRef.current) return;
-    setStatus('CALCULATING...');
-    setMutationTimer(RECOMPOSE_INTERVAL / 1000);
+    setStatus('NEURAL_GEN...');
     try {
       const response = await ai.models.generateContent({
         model: TARGET_MODEL,
-        contents: `BPM: ${bpmRef.current}. Compose Music DNA. 
-        RULES:
-        1. LeadMelody: At least 5 MIDI notes (60-84).
-        2. Chords: Lush 4-note structures.
-        3. aiThought: MAX 15 WORDS summarize.
-        FASTEST RESPONSE REQUIRED.`,
+        contents: `BPM: ${bpmRef.current}. TASK: Virtuoso Electronic DNA. 
+        MANDATORY: 
+        1. COMPLEX leadMelody (MIDI 60-84, min 5 notes). 
+        2. Lush 4-note chordProgression. 
+        3. Glitch & Arp patterns.
+        4. aiThought: ULTRA-CONCISE (max 10 words).`,
         config: {
-          systemInstruction: "You are a fast MIDI orchestrator. Output strict JSON. aiThought must be ultra-short (under 15 words).",
+          systemInstruction: "You are a master AI musician. Output complex MIDI patterns in strict JSON. Speed is priority.",
           responseMimeType: "application/json",
           responseSchema: {
             type: Type.OBJECT,
             properties: {
               genre: { type: Type.STRING },
-              aiThought: { type: Type.STRING, description: "EXTREMELY SHORT (MAX 15 WORDS) intention." },
+              aiThought: { type: Type.STRING, description: "Max 10 words summary." },
               scale: { type: Type.STRING },
-              mood: { type: Type.STRING },
               color: { type: Type.STRING },
               sections: {
                 type: Type.OBJECT,
@@ -261,18 +242,9 @@ function App() {
       const mergedDna = { ...INITIAL_DNA, ...res };
       setDna(mergedDna);
       dnaRef.current = mergedDna;
-      setStatus(`${mergedDna.genre.toUpperCase()}`);
-    } catch (e) { setStatus('THINKING_FAILED'); }
+      setStatus(mergedDna.aiThought?.toUpperCase() || 'STEADY');
+    } catch (e) { setStatus('RETRYING...'); }
   };
-
-  useEffect(() => {
-    let int: number, tInt: number;
-    if (isActive) {
-      int = window.setInterval(fetchNewDNA, RECOMPOSE_INTERVAL);
-      tInt = window.setInterval(() => setMutationTimer(t => Math.max(0, t - 1)), 1000);
-    }
-    return () => { clearInterval(int); clearInterval(tInt); };
-  }, [isActive]);
 
   useEffect(() => {
     let frame: number;
@@ -280,13 +252,21 @@ function App() {
       if (analyserRef.current) {
         const data = new Uint8Array(analyserRef.current.frequencyBinCount);
         analyserRef.current.getByteFrequencyData(data);
-        setAudioLevel(data.reduce((a, b) => a + b, 0) / data.length / 100);
+        const level = data.reduce((a, b) => a + b, 0) / data.length / 100;
+        setAudioLevel(level);
       }
       frame = requestAnimationFrame(update);
     };
     update();
     return () => cancelAnimationFrame(frame);
   }, []);
+
+  useEffect(() => {
+    if (isActive) {
+      const int = setInterval(fetchNewDNA, RECOMPOSE_INTERVAL);
+      return () => clearInterval(int);
+    }
+  }, [isActive]);
 
   const toggle = async () => {
     await initAudio();
@@ -300,134 +280,148 @@ function App() {
     }
   };
 
+  const handleLongPress = (direction: number) => {
+    if (longPressTimerRef.current) return;
+    longPressTimerRef.current = window.setInterval(() => {
+      setBpm(prev => {
+        const next = Math.max(40, Math.min(220, prev + direction));
+        bpmRef.current = next;
+        return next;
+      });
+    }, 60);
+  };
+
+  const stopLongPress = () => {
+    if (longPressTimerRef.current) {
+      clearInterval(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
+
+  const handleManualBpm = (e: React.FormEvent) => {
+    e.preventDefault();
+    const val = parseInt(tempBpm);
+    if (!isNaN(val)) {
+      setBpm(val);
+      bpmRef.current = val;
+    }
+    setIsEditingBpm(false);
+  };
+
   return (
-    <div className="min-h-screen bg-[#020202] text-white font-mono flex flex-col overflow-hidden selection:bg-purple-500 selection:text-white">
-      {/* Background Ambience */}
+    <div className="min-h-screen bg-[#000] flex items-center justify-center font-sans overflow-hidden">
+      {/* Dynamic Aura Background */}
       <div 
-        className="fixed inset-0 opacity-20 transition-all duration-[3000ms]"
-        style={{ background: `radial-gradient(circle at 50% 50%, ${dna.color}aa 0%, transparent 70%)`, filter: 'blur(100px)' }} 
+        className="fixed inset-0 transition-colors duration-[3000ms] ease-in-out" 
+        style={{ 
+          backgroundColor: isActive ? `${dna.color}15` : '#050505',
+          backdropFilter: 'blur(120px)' 
+        }} 
       />
 
-      <main className="relative z-10 flex flex-col h-screen max-w-7xl mx-auto w-full p-6">
+      {/* Widget Orb Container */}
+      <div className="relative group select-none">
         
-        {/* Header Section */}
-        <header className="flex justify-between items-end border-b border-white/5 pb-6 mb-8">
-          <div className="space-y-1">
-             <h1 className="text-4xl font-black tracking-tighter italic text-transparent bg-clip-text bg-gradient-to-r from-white to-white/30 uppercase">Neural_Strudel</h1>
-             <p className="text-[10px] font-bold opacity-30 tracking-[0.4em] uppercase">AI Orchestrator v5.2 // {status}</p>
+        {/* BPM Side Controllers */}
+        <div 
+          onMouseDown={() => handleLongPress(-1)} onMouseUp={stopLongPress} onMouseLeave={stopLongPress}
+          className="absolute -left-36 top-0 bottom-0 w-32 cursor-pointer z-50 flex items-center justify-end pr-8 opacity-0 group-hover:opacity-40 transition-opacity"
+        >
+          <div className="text-5xl font-thin text-blue-400">−</div>
+        </div>
+        <div 
+          onMouseDown={() => handleLongPress(1)} onMouseUp={stopLongPress} onMouseLeave={stopLongPress}
+          className="absolute -right-36 top-0 bottom-0 w-32 cursor-pointer z-50 flex items-center justify-start pl-8 opacity-0 group-hover:opacity-40 transition-opacity"
+        >
+          <div className="text-5xl font-thin text-red-400">+</div>
+        </div>
+
+        {/* The Main Focus Orb */}
+        <div 
+          onClick={(e) => { if(e.detail === 1) toggle(); }}
+          onDoubleClick={() => { setIsEditingBpm(true); setTempBpm(bpm.toString()); }}
+          className={`relative w-52 h-52 rounded-full flex items-center justify-center transition-all duration-700 cursor-pointer overflow-hidden
+            ${isActive ? 'scale-110' : 'scale-100'} 
+            bg-white/[0.03] border border-white/10 backdrop-blur-3xl`}
+          style={{ 
+            boxShadow: isActive ? `0 0 100px ${dna.color}33, inset 0 0 30px ${dna.color}11` : '0 20px 50px rgba(0,0,0,0.8)'
+          }}
+        >
+          {/* Audio Energy Pulse */}
+          <div 
+            className="absolute inset-0 rounded-full opacity-40 transition-transform duration-75 pointer-events-none"
+            style={{ 
+              background: `radial-gradient(circle, ${dna.color} 0%, transparent 75%)`,
+              transform: `scale(${1 + audioLevel * 1.8})` 
+            }}
+          />
+
+          {/* Central Display */}
+          <div className="relative z-10 flex flex-col items-center">
+            {isEditingBpm ? (
+              <form onSubmit={handleManualBpm} className="flex flex-col items-center">
+                <input 
+                  autoFocus
+                  type="text" 
+                  value={tempBpm} 
+                  onChange={e => setTempBpm(e.target.value)}
+                  onBlur={() => setIsEditingBpm(false)}
+                  className="bg-transparent text-center text-5xl font-black w-28 outline-none border-b-2 border-white/40 caret-white"
+                />
+              </form>
+            ) : (
+              <>
+                <span className="text-6xl font-black italic tracking-tighter tabular-nums drop-shadow-2xl">{bpm}</span>
+                <div className={`text-[10px] font-black opacity-30 uppercase tracking-[0.4em] mt-2 transition-all ${isActive ? 'text-white' : 'text-white/40'}`}>
+                  {isActive ? 'Synthesizing' : 'Ready'}
+                </div>
+              </>
+            )}
           </div>
-          <div className="text-right flex flex-col items-end">
-             <span className="text-[9px] font-black opacity-20 uppercase mb-1">Scale: {dna.scale}</span>
-             <div className="text-4xl font-black tabular-nums">{mutationTimer}s</div>
-          </div>
-        </header>
 
-        <div className="flex-1 grid grid-cols-12 gap-6 overflow-hidden">
-          
-          {/* Left Panel: Controls & Metrics */}
-          <div className="col-span-12 lg:col-span-3 flex flex-col gap-6">
-            <div className="bg-white/5 border border-white/10 rounded-3xl p-6 backdrop-blur-md">
-               <div className="flex justify-between items-end mb-4">
-                  <span className="text-[9px] font-black opacity-30 uppercase tracking-widest">Arm_Frequency</span>
-                  <span className="text-5xl font-black italic">{bpm}</span>
-               </div>
-               <input 
-                 type="range" min="40" max="180" value={bpm} 
-                 onChange={(e) => {setBpm(parseInt(e.target.value)); bpmRef.current = parseInt(e.target.value);}}
-                 className="w-full h-1 bg-white/10 rounded-full appearance-none cursor-pointer accent-white"
-               />
-            </div>
-
-            <button 
-              onClick={toggle}
-              className={`py-8 rounded-3xl text-2xl font-black italic transition-all active:scale-[0.97] border-2 ${isActive ? 'bg-transparent border-red-500/30 text-red-500' : 'bg-white text-black shadow-xl'}`}
-            >
-              {isActive ? 'HALT_SYNTH' : 'INIT_AI'}
-            </button>
-
-            {/* AI Thought Log: Extremely Shortened */}
-            <div className="flex-1 bg-white/5 border border-white/10 rounded-3xl p-6 overflow-hidden flex flex-col">
-               <span className="text-[9px] font-black opacity-30 uppercase mb-4 tracking-tighter">AI_Core_Intention</span>
-               <div className="flex-1 text-[11px] text-emerald-400 font-black leading-relaxed italic opacity-90 overflow-y-auto custom-scrollbar uppercase">
-                 {dna.aiThought || "STANDBY..."}
-               </div>
-            </div>
-          </div>
-
-          {/* Right Panel: Sequencer & Manifest */}
-          <div className="col-span-12 lg:col-span-9 flex flex-col gap-6 overflow-hidden">
-             
-             {/* Sequencer: Stabilized Visuals */}
-             <div className="h-2/3 bg-white/5 border border-white/10 rounded-[2.5rem] p-10 flex flex-col justify-between relative overflow-hidden">
-                <div className="flex justify-between text-[9px] font-black opacity-20 tracking-widest uppercase mb-4">
-                   <span>Melodic_DNA_Matrix</span>
-                   <span>Section: {currentSection}</span>
-                </div>
-
-                <div className="flex-1 grid grid-cols-8 gap-4 items-center">
-                   {(dna.sections[currentSection].leadMelody || []).map((note, i) => (
-                     <div key={i} className="relative flex flex-col items-center group">
-                        <div 
-                          className={`w-full h-40 rounded-2xl transition-all duration-700 ease-in-out border border-white/5 ${note ? 'bg-white/10' : 'bg-white/[0.02]'}`}
-                          style={{
-                            backgroundColor: (note && currentStep === i) ? dna.color : '',
-                            boxShadow: (note && currentStep === i) ? `0 0 40px ${dna.color}66` : 'none',
-                            transform: currentStep === i ? 'scale(1.05)' : 'scale(1)',
-                            opacity: currentStep === i ? 1 : 0.4
-                          }}
-                        />
-                        <span className={`text-[8px] mt-2 transition-opacity duration-500 ${currentStep === i ? 'opacity-100' : 'opacity-20'}`}>
-                           {note ? `M_${note}` : '---'}
-                        </span>
-                     </div>
-                   ))}
-                </div>
-
-                <div className="absolute inset-0 pointer-events-none grid grid-cols-8 opacity-[0.03]">
-                   {[...Array(8)].map((_,i) => <div key={i} className={`border-r border-white h-full ${currentStep === i ? 'bg-white' : ''}`} />)}
-                </div>
-             </div>
-
-             {/* Raw Data Manifest: Confirm AI Involvement */}
-             <div className="h-1/3 flex gap-6">
-                <div className="flex-1 bg-black/40 border border-white/10 rounded-3xl p-6 relative overflow-hidden group">
-                   <div className="flex justify-between items-center mb-4">
-                      <span className="text-[9px] font-black opacity-30 uppercase tracking-widest">Neural_Manifest</span>
-                      <button onClick={() => setShowRaw(!showRaw)} className="text-[8px] bg-white/10 px-2 py-1 rounded hover:bg-white/20 transition-colors uppercase font-bold">
-                        {showRaw ? 'HIDE_RAW' : 'VIEW_RAW'}
-                      </button>
-                   </div>
-                   
-                   <div className="h-full overflow-y-auto font-mono text-[9px] text-emerald-500/70 custom-scrollbar">
-                      {showRaw ? (
-                        <pre className="whitespace-pre-wrap">{JSON.stringify(dna, null, 2)}</pre>
-                      ) : (
-                        <div className="space-y-1">
-                           <div className="flex justify-between border-b border-white/5 py-1"><span className="opacity-40">GENRE</span> <span>{dna.genre}</span></div>
-                           <div className="flex justify-between border-b border-white/5 py-1"><span className="opacity-40">CHORDS</span> <span>{JSON.stringify(dna.sections[currentSection].chordProgression[0])}</span></div>
-                           <div className="flex justify-between border-b border-white/5 py-1"><span className="opacity-40">BASS_LINE</span> <span className="truncate ml-4">{dna.sections[currentSection].bassLine.join(", ")}</span></div>
-                           <div className="text-[8px] text-white/10 mt-2 uppercase tracking-tighter italic">[ OPTIMIZED FOR 2.5 FLASH SPEED ]</div>
-                        </div>
-                      )}
-                   </div>
-                </div>
-
-                <div className="w-64 bg-white/5 border border-white/10 rounded-3xl p-6 flex flex-col justify-between">
-                   <span className="text-[9px] font-black opacity-30 uppercase">Osc_Level</span>
-                   <div className="flex-1 w-full bg-white/5 rounded-2xl overflow-hidden mt-2 relative">
-                      <div className="absolute inset-x-0 bottom-0 bg-white transition-all duration-75" style={{ height: `${audioLevel * 100}%`, opacity: 0.1 + audioLevel }} />
-                   </div>
-                </div>
-             </div>
-
+          {/* Step Sequencer Ring Indicators */}
+          <div className="absolute inset-3 border border-white/5 rounded-full pointer-events-none">
+            {[...Array(8)].map((_, i) => (
+              <div 
+                key={i} 
+                className={`absolute w-1.5 h-1.5 rounded-full transition-all duration-300`}
+                style={{
+                  top: '50%', left: '50%',
+                  transform: `rotate(${i * 45}deg) translate(0, -90px) scale(${currentStep === i ? 2.5 : 1})`,
+                  backgroundColor: currentStep === i ? dna.color : 'rgba(255,255,255,0.08)',
+                  boxShadow: currentStep === i ? `0 0 15px ${dna.color}` : 'none',
+                  opacity: currentStep === i ? 1 : 0.4
+                }}
+              />
+            ))}
           </div>
         </div>
 
-        <footer className="mt-6 flex justify-between items-center text-[9px] font-black opacity-10 tracking-[1em] uppercase border-t border-white/5 pt-6">
-           <span>Speed_Optimized_v5.2</span>
-           <span>Low_Latency_Mode_On</span>
-        </footer>
-      </main>
+        {/* Bottom Status Ticker */}
+        <div className="absolute -bottom-20 left-0 right-0 text-center px-4">
+          <p className="text-[10px] font-black opacity-30 uppercase tracking-[0.6em] transition-opacity duration-700 group-hover:opacity-100 truncate max-w-[240px] mx-auto">
+            {status}
+          </p>
+        </div>
+      </div>
+
+      {/* Micro-Stats Display (Floating) */}
+      <div className="fixed bottom-12 left-12 right-12 flex justify-between items-end pointer-events-none text-white/10 uppercase font-black tracking-widest text-[9px]">
+        <div className="flex gap-8">
+           <div className="flex flex-col">
+              <span>Model_Link</span>
+              <span className="text-white/20">Gemini_2.5_Flash</span>
+           </div>
+           <div className="flex flex-col">
+              <span>Orch_Mode</span>
+              <span className="text-white/20">Virtuoso_Full_Track</span>
+           </div>
+        </div>
+        <div className="text-right flex flex-col">
+           <span>Harmonic_Scale</span>
+           <span className="text-white/20">{dna.scale}</span>
+        </div>
+      </div>
     </div>
   );
 }
