@@ -58,7 +58,8 @@ const INITIAL_DNA: MasterDNA = {
 
 function App() {
   const [isActive, setIsActive] = useState(false);
-  const [bpm, setBpm] = useState(INITIAL_BPM);
+  const [bpm, setBpm] = useState(INITIAL_BPM); // The "Live" BPM
+  const [pendingBpm, setPendingBpm] = useState(INITIAL_BPM); // The "UI" BPM pending confirmation
   const [dna, setDna] = useState<MasterDNA>(INITIAL_DNA);
   const [status, setStatus] = useState('STANDBY');
   const [audioLevel, setAudioLevel] = useState(0);
@@ -70,7 +71,7 @@ function App() {
   // Widget specific states
   const [isMiniMode, setIsMiniMode] = useState(false);
   const [isEditingBpm, setIsEditingBpm] = useState(false);
-  const [tempBpm, setTempBpm] = useState(INITIAL_BPM.toString());
+  const [tempBpm, setTempBpm] = useState(INITIAL_BPM.toString()); // For text input
 
   const audioCtxRef = useRef<AudioContext | null>(null);
   const masterGainRef = useRef<GainNode | null>(null);
@@ -367,6 +368,9 @@ function App() {
     e.preventDefault();
     const val = parseInt(tempBpm);
     if (!isNaN(val)) {
+      setPendingBpm(val); // Set pending instead of live
+      // Auto-confirm for direct text input? Maybe yes, maybe no. Let's make it consistent: user must confirm.
+      // Or for mini-mode, maybe auto-confirm is better UX? Let's auto-confirm for mini-mode direct input for now as there is no space for confirm button.
       setBpm(val);
       bpmRef.current = val;
     }
@@ -512,16 +516,35 @@ function App() {
 
           {/* Left Panel: Controls & Metrics */}
           <div className="col-span-12 lg:col-span-3 flex flex-col gap-6">
-            <div className="bg-white/5 border border-white/10 rounded-3xl p-6 backdrop-blur-md">
+            <div className="bg-white/5 border border-white/10 rounded-3xl p-6 backdrop-blur-md relative">
               <div className="flex justify-between items-end mb-4">
-                <span className="text-[9px] font-black opacity-30 uppercase tracking-widest">Arm_Frequency</span>
-                <span className="text-5xl font-black italic tabular-nums">{bpm}</span>
+                <span className="text-[9px] font-black opacity-30 uppercase tracking-widest">Target_Frequency</span>
+                <span className={`text-5xl font-black italic tabular-nums ${pendingBpm !== bpm ? 'text-yellow-400' : ''}`}>{pendingBpm}</span>
               </div>
               <input
-                type="range" min="40" max="180" value={bpm}
-                onChange={(e) => { setBpm(parseInt(e.target.value)); bpmRef.current = parseInt(e.target.value); }}
-                className="w-full h-1 bg-white/10 rounded-full appearance-none cursor-pointer accent-white"
+                type="range" min="40" max="180" value={pendingBpm}
+                onChange={(e) => setPendingBpm(parseInt(e.target.value))}
+                className="w-full h-1 bg-white/10 rounded-full appearance-none cursor-pointer accent-white mb-4"
               />
+
+              {/* Confirm Button */}
+              {pendingBpm !== bpm && (
+                <button
+                  onClick={() => {
+                    setBpm(pendingBpm);
+                    bpmRef.current = pendingBpm;
+                    // Reset history for new BPM immediately
+                    if (generationHistoryRef.current[pendingBpm]) {
+                      // If we have history, good.
+                    }
+                    // If active, force immediate re-generation or cycle check
+                    if (isActive) fetchNewDNA();
+                  }}
+                  className="w-full py-2 bg-yellow-400/20 border border-yellow-400/50 text-yellow-400 text-[10px] font-black tracking-widest hover:bg-yellow-400/30 transition-colors uppercase rounded-lg"
+                >
+                  Confirm_New_Speed
+                </button>
+              )}
             </div>
 
             <button
